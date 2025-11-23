@@ -298,7 +298,7 @@ function renderPivotTable() {
 
   // 2. ჰედერის აწყობა (მოკლე თარიღებით: 21.11)
   let headerHTML = `<tr>
-    <th style="width: 80px; text-align: center;">ჯამურად</th>
+    <th style="width: 110px; text-align: center;">ჯამურად</th>
     <th style="width: 100px; text-align: center;">TAG</th>
     <th style="width: 120px;">კატეგორია</th>`;
 
@@ -603,4 +603,5 @@ function exportReportToExcel() {
   const dateStr = new Date().toISOString().slice(0, 10);
   XLSX.writeFile(wb, `WFS_Report_${dateStr}.xlsx`);
 }
+
 
