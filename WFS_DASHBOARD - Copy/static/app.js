@@ -394,7 +394,7 @@ function loadData(forceRefresh = false) {
         renderReport();
       }
 
-      setStatus(`მიუღებულია: ${data.count} ჩანაწერი`);
+      setStatus(`მიღებულია: ${data.count} ჩანაწერი`);
     } catch (error) {
       setStatus(`შეცდომა: ${error.message}`);
     }
@@ -603,3 +603,4 @@ function exportReportToExcel() {
   const dateStr = new Date().toISOString().slice(0, 10);
   XLSX.writeFile(wb, `WFS_Report_${dateStr}.xlsx`);
 }
+
