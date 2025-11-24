@@ -73,7 +73,7 @@ USERS = {
     },
     "user1": {
         "password": generate_password_hash("user2025"),
-        "name": "შალვა მარტიაშილი",
+        "name": "USER",
     },
 }
 
