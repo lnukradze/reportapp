@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ka">
   <head>
     <meta charset="utf-8" />
@@ -21,7 +21,7 @@
   </head>
   <body class="theme-light">
     <header class="topbar">
-      <div class="brand">WFS Dashboard</div>
+      <div class="brand">REPORT Dashboard</div>
 
       <div class="nav-tabs">
         <button id="tab-data" class="nav-btn active">მონაცემები</button>
@@ -41,6 +41,27 @@
           <input type="checkbox" id="themeToggle" />
           <span class="slider"></span>
         </label>
+
+        <div class="user-section">
+          <div class="user-info">
+            <span class="user-icon">👤</span>
+            <span class="user-name">{{ user_display_name }}</span>
+            <div class="user-dropdown">
+              <div class="dropdown-header">
+                <div class="dropdown-user-icon">👤</div>
+                <div class="dropdown-user-details">
+                  <div class="dropdown-display-name">{{ user_display_name }}</div>
+                  <div class="dropdown-username">@{{ username }}</div>
+                </div>
+              </div>
+              <div class="dropdown-divider"></div>
+              <a href="/logout" class="dropdown-item logout-btn">
+                <span class="logout-icon">🚪</span>
+                გასვლა
+              </a>
+            </div>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -246,8 +267,14 @@
       // თემის შენახვის ლოგიკა
       const saved = localStorage.getItem("theme");
       if (saved) document.body.className = saved;
+      
+      // User info in JS
+      window.currentUser = {
+        username: "{{ username }}",
+        displayName: "{{ user_display_name }}"
+      };
     </script>
 
-    <script src="/static/app.js?v=2"></script>
+    <script src="/static/app.js?v=3"></script>
   </body>
 </html>

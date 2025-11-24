@@ -1,17 +1,27 @@
 # -*- coding: utf-8 -*-
 import os
-import os, json, urllib.parse
-from datetime import datetime
+import json
+import urllib.parse
+from datetime import datetime, timedelta
 import requests
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, redirect, url_for, session
+from flask_login import (
+    LoginManager,
+    UserMixin,
+    login_user,
+    login_required,
+    logout_user,
+    current_user,
+)
+from werkzeug.security import check_password_hash, generate_password_hash
+import secrets
 
-APP_TITLE = "WFS Dashboard"
+APP_TITLE = "REPORT Dashboard"
 
 # --- WFS კონფიგი ---
-# დარწმუნდით, რომ ეს მონაცემები 100%-ით სწორია
 WFS_URL = "https://wblr.napr.gov.ge/data/SLR/ows"
-WFS_USER = "wblr_user"  # შეცვალე საჭიროებისამებრ
-WFS_PASS = "WFS_editor"  # შეცვალე საჭიროებისამებრ
+WFS_USER = "wblr_user"
+WFS_PASS = "WFS_editor"
 TYPENAME = "SLR:GFLD_PARCELS"
 SRSNAME = "EPSG:32638"
 
@@ -34,10 +44,96 @@ app = Flask(
     template_folder="templates",
 )
 
+# Secret key for sessions - generate random key
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", secrets.token_hex(32))
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)  # 7 დღე სესიის ვადა
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = False  # Set to True if using HTTPS
+
+# Login Manager setup
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = "login"
+login_manager.login_message = "გთხოვთ გაიაროთ ავტორიზაცია"
+
+
+# User class
+class User(UserMixin):
+    def __init__(self, username):
+        self.id = username
+        self.username = username
+
+
+# Static users database (in production, use real database)
+USERS = {
+    "Lnukradze": {
+        "password": generate_password_hash("admin1177"),
+        "name": "ლუკა ნუკრაძე",
+    },
+    "user1": {
+        "password": generate_password_hash("user2025"),
+        "name": "შალვა მარტიაშილი",
+    },
+}
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    if user_id in USERS:
+        return User(user_id)
+    return None
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for("index"))
+
+    if request.method == "POST":
+        username = request.form.get("username")
+        password = request.form.get("password")
+        remember = request.form.get("remember") == "on"
+
+        if username in USERS and check_password_hash(
+            USERS[username]["password"], password
+        ):
+            user = User(username)
+            login_user(user, remember=remember)
+
+            # Set permanent session if remember me is checked
+            if remember:
+                session.permanent = True
+
+            next_page = request.args.get("next")
+            return redirect(next_page or url_for("index"))
+        else:
+            return render_template(
+                "login.html", error="არასწორი მომხმარებელი ან პაროლი"
+            )
+
+    return render_template("login.html")
+
+
+@app.route("/logout")
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for("login"))
+
 
 @app.route("/")
+@login_required
 def index():
-    return render_template("index.html", app_title=APP_TITLE)
+    user_display_name = USERS.get(current_user.username, {}).get(
+        "name", current_user.username
+    )
+    return render_template(
+        "index.html",
+        app_title=APP_TITLE,
+        username=current_user.username,
+        user_display_name=user_display_name,
+    )
 
 
 def _split_multi(val: str):
@@ -48,6 +144,7 @@ def _split_multi(val: str):
 
 
 @app.route("/api/data")
+@login_required
 def api_data():
     zones = _split_multi(request.args.get("zone", ""))
     sectors = _split_multi(request.args.get("sector", ""))
@@ -73,7 +170,7 @@ def api_data():
             ors = " OR ".join([f"SECTOR='{s}'" for s in sectors])
             cql.append(f"({ors})")
 
-    # --- თარიღი (გასწორებული ლოგიკა) ---
+    # --- თარიღი ---
     if date_from:
         start_date_time = f"{date_from} 00:00:00"
         if date_to:
@@ -102,13 +199,12 @@ def api_data():
 
     url = WFS_URL + "?" + urllib.parse.urlencode(params, safe=":=><' ")
 
-    # --- !!! ყურადღება აქ !!! ---
     try:
         print(f"--- [WFS Request] ---")
         print(f"URL: {url}")
 
         r = requests.get(url, auth=(WFS_USER, WFS_PASS), timeout=60)
-        r.raise_for_status()  # ეს გამოიწვევს შეცდომას, თუ სტატუსი არ არის 200
+        r.raise_for_status()
 
         data = r.json()
         features = data.get("features", [])
@@ -158,13 +254,11 @@ def api_data():
         )
 
     except Exception as e:
-        # <<< აქ დავამატეთ შეცდომის დაპრინტვა ტერმინალში >>>
         print("\n---!!! WFS ERROR !!!---")
         print(f"Failed URL: {url}")
         print(f"Error details: {e}")
         print("-----------------------\n")
 
-        # დავაბრუნოთ შეცდომა ბრაუზერშიც
         return (
             jsonify(
                 {
@@ -179,6 +273,20 @@ def api_data():
         )
 
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+@app.route("/api/user_info")
+@login_required
+def user_info():
+    return jsonify(
+        {
+            "username": current_user.username,
+            "display_name": USERS.get(current_user.username, {}).get(
+                "name", current_user.username
+            ),
+        }
+    )
 
+
+# if __name__ == "__main__":
+# app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+if __name__ == "__main__":
+    app.run(host="127.0.0.1", port=5000, debug=True)

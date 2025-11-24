@@ -3,15 +3,96 @@ let sortState = { key: null, asc: true };
 let activeMaps = {};
 let currentView = "data"; // 'data' or 'report'
 
+// Filter state management
+const FILTER_STORAGE_KEY = "dashboard_filters";
+const TAB_STORAGE_KEY = "dashboard_active_tab";
+
+function saveFiltersToStorage() {
+  const filters = {
+    zone: document.getElementById("f-zone").value,
+    sector: document.getElementById("f-sector").value,
+    dateFrom: document.getElementById("f-from").value,
+    dateTo: document.getElementById("f-to").value,
+    azomvis: getSelectedAzomvis()
+  };
+  localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(filters));
+}
+
+function loadFiltersFromStorage() {
+  const stored = localStorage.getItem(FILTER_STORAGE_KEY);
+  if (stored) {
+    try {
+      const filters = JSON.parse(stored);
+      if (filters.zone) document.getElementById("f-zone").value = filters.zone;
+      if (filters.sector) document.getElementById("f-sector").value = filters.sector;
+      if (filters.dateFrom) document.getElementById("f-from").value = filters.dateFrom;
+      if (filters.dateTo) document.getElementById("f-to").value = filters.dateTo;
+      if (filters.azomvis) {
+        setSelectedAzomvis(filters.azomvis);
+      }
+    } catch (e) {
+      console.error("Error loading filters:", e);
+    }
+  }
+}
+
+function getSelectedAzomvis() {
+  const checkboxes = document.querySelectorAll("#az-menu input.az-opt[value]");
+  const selected = [];
+  checkboxes.forEach(cb => {
+    if (cb.checked) selected.push(cb.value);
+  });
+  return selected;
+}
+
+function setSelectedAzomvis(values) {
+  const checkboxes = document.querySelectorAll("#az-menu input.az-opt[value]");
+  checkboxes.forEach(cb => {
+    cb.checked = values.includes(cb.value);
+  });
+  updateAzomvisDisplay();
+}
+
+function saveActiveTab() {
+  localStorage.setItem(TAB_STORAGE_KEY, currentView);
+}
+
+function loadActiveTab() {
+  const stored = localStorage.getItem(TAB_STORAGE_KEY);
+  if (stored && (stored === "data" || stored === "report")) {
+    currentView = stored;
+    return stored;
+  }
+  return "data";
+}
+
 window.addEventListener("DOMContentLoaded", () => {
   initTheme();
   initProj4();
   initDropdowns();
   initDateInputs();
 
+  // Load saved filters
+  loadFiltersFromStorage();
+  
+  // Load saved tab
+  const savedTab = loadActiveTab();
+  if (savedTab) {
+    switchView(savedTab);
+  }
+
+  // Save filters on change
+  document.getElementById("f-zone").addEventListener("input", saveFiltersToStorage);
+  document.getElementById("f-sector").addEventListener("input", saveFiltersToStorage);
+  document.getElementById("f-from").addEventListener("change", saveFiltersToStorage);
+  document.getElementById("f-to").addEventListener("change", saveFiltersToStorage);
+
   document
     .getElementById("btn-load")
-    .addEventListener("click", () => loadData(false));
+    .addEventListener("click", () => {
+      saveFiltersToStorage();
+      loadData(false);
+    });
   document
     .getElementById("btn-refresh")
     .addEventListener("click", () => loadData(true));
@@ -20,10 +101,16 @@ window.addEventListener("DOMContentLoaded", () => {
     .addEventListener("click", exportReportToExcel);
   document
     .getElementById("tab-data")
-    .addEventListener("click", () => switchView("data"));
+    .addEventListener("click", () => {
+      switchView("data");
+      saveActiveTab();
+    });
   document
     .getElementById("tab-report")
-    .addEventListener("click", () => switchView("report"));
+    .addEventListener("click", () => {
+      switchView("report");
+      saveActiveTab();
+    });
   document.querySelectorAll("th.sortable").forEach((th) => {
     th.addEventListener("click", () => handleSort(th.dataset.key));
   });
@@ -34,6 +121,16 @@ window.addEventListener("DOMContentLoaded", () => {
       updateCharts();
     }
   });
+
+  // Auto-load data if filters are present
+  const hasFilters = document.getElementById("f-zone").value || 
+                     document.getElementById("f-sector").value ||
+                     document.getElementById("f-from").value ||
+                     document.getElementById("f-to").value;
+  
+  if (hasFilters) {
+    loadData(false);
+  }
 });
 
 // --- ხედის გადართვა ---
